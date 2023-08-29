@@ -1,6 +1,6 @@
 # Using the `rust-musl-builder` as base image, instead of 
 # the official Rust toolchain
-FROM clux/muslrust:stable AS chef
+FROM clux/muslrust:1.72.0 AS chef
 USER root
 RUN cargo install cargo-chef
 WORKDIR /app
