@@ -1,29 +1,21 @@
-use reqwest::{Client, Body, multipart};
+use reqwest::{multipart, Client};
 use serde::Deserialize;
-use tokio::fs::{File, self};
-use tokio_util::codec::{FramedRead, BytesCodec};
+use tokio::fs;
 
 #[derive(Deserialize, Debug)]
 pub struct Update {
-    update_id: i64,
     pub message: Message,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Message {
-    message_id: i64,
     pub from: User,
-    date: i64,
     pub text: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct User {
     pub id: i64,
-    is_bot: bool,
-    first_name: String,
-    last_name: Option<String>,
-    username: Option<String>,
 }
 
 pub struct TelegramAPI {
@@ -62,8 +54,7 @@ impl TelegramAPI {
         println!("Created part");
 
         //create the multipart form
-        let form = multipart::Form::new()
-            .part("video", some_file);
+        let form = multipart::Form::new().part("video", some_file);
 
         println!("Created form");
 
