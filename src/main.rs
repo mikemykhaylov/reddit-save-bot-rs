@@ -45,7 +45,13 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let api = TelegramAPI::new(token);
 
     // try to deserialize the value into our struct
-    let update: Update = serde_json::from_value(request).expect("Request should be a valid Update");
+    let update: Update = match serde_json::from_value(request.clone()) {
+        Ok(update) => update,
+        Err(e) => {
+            println!("{}", request);
+            panic!("Request should be a valid Update: {}", e);
+        }
+    };
 
     // check if the message is from the personal id
     // don't notify if it's not, as this prevents spam
