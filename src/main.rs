@@ -49,7 +49,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         Ok(update) => update,
         Err(e) => {
             println!("{}", request);
-            panic!("Request should be a valid Update: {}", e);
+            return (StatusCode::OK, "Ok");
         }
     };
 
