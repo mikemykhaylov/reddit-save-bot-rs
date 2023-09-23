@@ -22,7 +22,7 @@ async fn main() {
         .route("/webhook", post(get_video));
 
     // get PORT from env variable
-    let port = std::env::var("PORT").unwrap().parse::<u16>().unwrap();
+    let port = env::var("PORT").unwrap().parse::<u16>().unwrap();
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     println!("listening on {}", addr);
@@ -47,7 +47,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // try to deserialize the value into our struct
     let update: Update = match serde_json::from_value(request.clone()) {
         Ok(update) => update,
-        Err(e) => {
+        Err(_) => {
             println!("{}", request);
             return (StatusCode::OK, "Ok");
         }
