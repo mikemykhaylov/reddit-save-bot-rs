@@ -10,6 +10,7 @@ use axum::{
     Json, Router,
 };
 use std::net::SocketAddr;
+use tokio::fs::File;
 use url::Url;
 use uuid::Uuid;
 use ytd_rs::{Arg, YoutubeDL};
@@ -121,6 +122,27 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         .await
         .expect("Failed to read /tmp directory");
     println!("files: {:?}", files);
+
+    // check if the video is larger than 50MB
+    // if it is, send a message saying that the video is too large
+    // and delete the video
+    let file = File::open(format!("/tmp/{}.mp4", video_name))
+        .await
+        .expect("Failed to open video file");
+    let metadata = file.metadata().await.expect("Failed to get video metadata");
+    let size = metadata.len();
+    if size > 50_000_000 {
+        api.send_message(
+            update.message.from.id,
+            "Video is too large to send".to_string(),
+        )
+        .await
+        .expect("Failed to send message about video being too large");
+        tokio::fs::remove_file(format!("/tmp/{}.mp4", video_name))
+            .await
+            .expect("Failed to delete video");
+        return (StatusCode::OK, "Ok");
+    }
 
     api.send_video(update.message.from.id, format!("/tmp/{}.mp4", video_name))
         .await
