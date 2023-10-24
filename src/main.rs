@@ -104,13 +104,16 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // start download
     let download = match ytd.download() {
         Ok(download) => download,
-        Err(_) => {
+        Err(err) => {
             api.send_message(
                 update.message.from.id,
                 "Failed to download video".to_string(),
             )
             .await
             .expect("Failed to send message about failed download");
+
+            // print error for GCP logs to pick up from stderr
+            eprintln!("{}", err);
             return (StatusCode::OK, "Ok");
         }
     };
