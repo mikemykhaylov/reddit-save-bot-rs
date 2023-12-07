@@ -18,6 +18,9 @@ use ytd_rs::{Arg, YoutubeDL};
 
 #[tokio::main]
 async fn main() {
+    // set up logging
+    logging::set_up_logger();
+
     // build our application with a route
     let app = Router::new()
         .route("/", get(handler))
@@ -39,9 +42,9 @@ async fn handler() -> Html<&'static str> {
 }
 
 async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse {
-    // set up logging
-    logging::set_up_logger();
-    log::info!("Started handler");
+    let operation_id = &Uuid::new_v4().to_string();
+
+    log::info!(target: operation_id, "Started handler");
 
     // load environment variables
     let token = env::var("TELEGRAM_BOT_TOKEN").unwrap();
@@ -55,7 +58,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         Ok(update) => update,
         Err(_) => {
             // if it fails, be silent to prevent spam
-            log::error!("Failed to deserialize update: {}", request);
+            log::error!(target: operation_id, "Failed to deserialize update: {}", request);
             return (StatusCode::OK, "Ok");
         }
     };
@@ -63,7 +66,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // check if the message is from the personal id
     // don't notify if it's not, as this prevents spam
     if update.message.from.id.to_string() != personal_id {
-        log::info!(
+        log::info!(target: operation_id,
             "Message is not from personal id: {}",
             update.message.from.id
         );
@@ -76,7 +79,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
             .send_message(update.message.from.id, "Hello!".to_string())
             .await
         {
-            log::error!("Failed to send message: {}", e);
+            log::error!(target: operation_id, "Failed to send message: {}", e);
         }
         return (StatusCode::OK, "Ok");
     }
@@ -85,7 +88,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let url = match Url::parse(&update.message.text) {
         Ok(url) => url,
         Err(_) => {
-            log::warn!("Failed to parse URL: {}", update.message.text);
+            log::warn!(target: operation_id, "Failed to parse URL: {}", update.message.text);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -93,7 +96,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -101,7 +104,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
 
     // check if the URL is a reddit post
     if !url.host_str().unwrap().contains("reddit.com") {
-        log::warn!("URL is not a reddit post: {}", update.message.text);
+        log::warn!(target: operation_id, "URL is not a reddit post: {}", update.message.text);
         if let Err(e) = api
             .send_message(
                 update.message.from.id,
@@ -109,7 +112,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
             )
             .await
         {
-            log::error!("Failed to send message: {}", e);
+            log::error!(target: operation_id, "Failed to send message: {}", e);
         }
         return (StatusCode::OK, "Ok");
     }
@@ -123,7 +126,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let ytd = match YoutubeDL::new(&path, args, url.as_str()) {
         Ok(ytd) => ytd,
         Err(_) => {
-            log::error!("Failed to create YoutubeDL instance");
+            log::error!(target: operation_id, "Failed to create YoutubeDL instance");
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -131,7 +134,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -141,7 +144,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     match ytd.download() {
         Ok(download) => download,
         Err(_) => {
-            log::error!("Failed to start download");
+            log::error!(target: operation_id, "Failed to start download");
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -149,7 +152,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -159,7 +162,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let mut files = match tokio::fs::read_dir("/tmp").await {
         Ok(files) => files,
         Err(_) => {
-            log::error!("Failed to read /tmp");
+            log::error!(target: operation_id, "Failed to read /tmp");
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -167,7 +170,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -175,10 +178,10 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
 
     match files.next_entry().await.unwrap() {
         Some(video) => {
-            log::info!("Video file: {:?}", video.path());
+            log::info!(target: operation_id, "Video file: {:?}", video.path());
         }
         None => {
-            log::error!("Video not found");
+            log::error!(target: operation_id, "Video not found");
             return (StatusCode::OK, "Ok");
         }
     };
@@ -189,7 +192,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let file = match File::open(format!("/tmp/{}.mp4", video_name)).await {
         Ok(file) => file,
         Err(_) => {
-            log::error!("Failed to open video");
+            log::error!(target: operation_id, "Failed to open video");
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -197,7 +200,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -206,7 +209,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let metadata = match file.metadata().await {
         Ok(metadata) => metadata,
         Err(_) => {
-            log::error!("Failed to get video metadata");
+            log::error!(target: operation_id, "Failed to get video metadata");
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -214,7 +217,7 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
                 )
                 .await
             {
-                log::error!("Failed to send message: {}", e);
+                log::error!(target: operation_id, "Failed to send message: {}", e);
             }
             return (StatusCode::OK, "Ok");
         }
@@ -222,15 +225,15 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
 
     let size = metadata.len();
     if size > 50 * 1024 * 1024 {
-        log::warn!("Video is too large to send: {} bytes", size);
+        log::warn!(target: operation_id, "Video is too large to send: {} bytes", size);
         if let Err(e) = api
             .send_message(update.message.from.id, "Video is too large".to_string())
             .await
         {
-            log::error!("Failed to send message: {}", e);
+            log::error!(target: operation_id, "Failed to send message: {}", e);
         }
         if let Err(e) = tokio::fs::remove_file(format!("/tmp/{}.mp4", video_name)).await {
-            log::error!("Failed to delete video: {}", e);
+            log::error!(target: operation_id, "Failed to delete video: {}", e);
         }
         return (StatusCode::OK, "Ok");
     }
@@ -240,10 +243,10 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         .await
     {
         Ok(_) => {
-            log::info!("Video sent");
+            log::info!(target: operation_id, "Video sent");
         }
         Err(e) => {
-            log::error!("Failed to send video: {}", e);
+            log::error!(target: operation_id, "Failed to send video: {}", e);
         }
     }
 

@@ -1,10 +1,8 @@
 use chrono::Utc;
 use google_cloud_logging::{GCLogSeverity, GCOperation, GCSourceLocation, GoogleCloudStructLog};
 use log::{Level, LevelFilter, Log};
-use uuid::Uuid;
 
 pub struct Logger {
-    operation_id: String,
     operation_producer: String,
     error_report_type: String,
     max_log_level: LevelFilter,
@@ -24,7 +22,6 @@ impl Logger {
         };
 
         Logger {
-            operation_id: Uuid::new_v4().to_string(),
             operation_producer: format!("{}:{}", "reddit-save-bot", env!("CARGO_PKG_VERSION")),
             error_report_type:
                 "type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent"
@@ -56,6 +53,9 @@ impl Log for Logger {
 
         let level = self.log_level_to_gc_severity(record.level());
 
+        // not sure if target is intended to be used this way
+        let operation_id = record.metadata().target();
+
         let log_entry = GoogleCloudStructLog {
             severity: Some(level),
             message: Some(record.args().to_string()),
@@ -65,7 +65,7 @@ impl Log for Logger {
             },
             time: Some(Utc::now()),
             operation: Some(GCOperation {
-                id: Some(&self.operation_id),
+                id: Some(operation_id),
                 producer: Some(&self.operation_producer),
                 ..Default::default()
             }),
