@@ -125,8 +125,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let path = PathBuf::from("/tmp");
     let ytd = match YoutubeDL::new(&path, args, url.as_str()) {
         Ok(ytd) => ytd,
-        Err(_) => {
-            log::error!(target: operation_id, "Failed to create YoutubeDL instance");
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to create YoutubeDL instance: {}", e);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -143,8 +143,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // start download
     match ytd.download() {
         Ok(download) => download,
-        Err(_) => {
-            log::error!(target: operation_id, "Failed to start download");
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to start download: {}", e);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -161,8 +161,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // list files in /tmp
     let mut files = match tokio::fs::read_dir("/tmp").await {
         Ok(files) => files,
-        Err(_) => {
-            log::error!(target: operation_id, "Failed to read /tmp");
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to read /tmp: {}", e);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -191,8 +191,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // and delete the video
     let file = match File::open(format!("/tmp/{}.mp4", video_name)).await {
         Ok(file) => file,
-        Err(_) => {
-            log::error!(target: operation_id, "Failed to open video");
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to open video: {}", e);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
@@ -208,8 +208,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
 
     let metadata = match file.metadata().await {
         Ok(metadata) => metadata,
-        Err(_) => {
-            log::error!(target: operation_id, "Failed to get video metadata");
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to get video metadata: {}", e);
             if let Err(e) = api
                 .send_message(
                     update.message.from.id,
