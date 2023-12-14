@@ -1,4 +1,5 @@
 mod api;
+mod logging;
 
 use std::{env, path::PathBuf};
 
@@ -17,6 +18,9 @@ use ytd_rs::{Arg, YoutubeDL};
 
 #[tokio::main]
 async fn main() {
+    // set up logging
+    logging::set_up_logger();
+
     // build our application with a route
     let app = Router::new()
         .route("/", get(handler))
@@ -26,7 +30,7 @@ async fn main() {
     let port = env::var("PORT").unwrap().parse::<u16>().unwrap();
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    println!("listening on {}", addr);
+
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -38,6 +42,10 @@ async fn handler() -> Html<&'static str> {
 }
 
 async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse {
+    let operation_id = &Uuid::new_v4().to_string();
+
+    log::info!(target: operation_id, "Started handler");
+
     // load environment variables
     let token = env::var("TELEGRAM_BOT_TOKEN").unwrap();
     let personal_id = env::var("PERSONAL_ID").unwrap();
@@ -49,7 +57,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     let update: Update = match serde_json::from_value(request.clone()) {
         Ok(update) => update,
         Err(_) => {
-            println!("{}", request);
+            // if it fails, be silent to prevent spam
+            log::error!(target: operation_id, "Failed to deserialize update: {}", request);
             return (StatusCode::OK, "Ok");
         }
     };
@@ -57,38 +66,54 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
     // check if the message is from the personal id
     // don't notify if it's not, as this prevents spam
     if update.message.from.id.to_string() != personal_id {
+        log::info!(target: operation_id,
+            "Message is not from personal id: {}",
+            update.message.from.id
+        );
         return (StatusCode::OK, "Ok");
     }
 
     // if it's a /start command, send a message welcoming the user
     if update.message.text == "/start" {
-        api.send_message(update.message.from.id, "Hello!".to_string())
+        if let Err(e) = api
+            .send_message(update.message.from.id, "Hello!".to_string())
             .await
-            .unwrap();
+        {
+            log::error!(target: operation_id, "Failed to send message: {}", e);
+        }
+        return (StatusCode::OK, "Ok");
     }
 
     // try parsing the message text as a URL
     let url = match Url::parse(&update.message.text) {
         Ok(url) => url,
         Err(_) => {
-            api.send_message(
-                update.message.from.id,
-                "Please send a valid URL".to_string(),
-            )
-            .await
-            .expect("Failed to send message about invalid URL");
+            log::warn!(target: operation_id, "Failed to parse URL: {}", update.message.text);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Please send a valid URL".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
             return (StatusCode::OK, "Ok");
         }
     };
 
     // check if the URL is a reddit post
     if !url.host_str().unwrap().contains("reddit.com") {
-        api.send_message(
-            update.message.from.id,
-            "Please send a valid reddit post".to_string(),
-        )
-        .await
-        .expect("Failed to send message about invalid reddit post");
+        log::warn!(target: operation_id, "URL is not a reddit post: {}", update.message.text);
+        if let Err(e) = api
+            .send_message(
+                update.message.from.id,
+                "Please send a valid reddit post".to_string(),
+            )
+            .await
+        {
+            log::error!(target: operation_id, "Failed to send message: {}", e);
+        }
         return (StatusCode::OK, "Ok");
     }
 
@@ -98,58 +123,132 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         &format!("{}.%(ext)s", video_name),
     )];
     let path = PathBuf::from("/tmp");
-    let ytd =
-        YoutubeDL::new(&path, args, url.as_str()).expect("Failed to create YoutubeDL instance");
-
-    // start download
-    let download = match ytd.download() {
-        Ok(download) => download,
-        Err(err) => {
-            api.send_message(
-                update.message.from.id,
-                "Failed to download video".to_string(),
-            )
-            .await
-            .expect("Failed to send message about failed download");
-
-            // print error for GCP logs to pick up from stderr
-            eprintln!("{}", err);
+    let ytd = match YoutubeDL::new(&path, args, url.as_str()) {
+        Ok(ytd) => ytd,
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to create YoutubeDL instance: {}", e);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Failed to download video".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
             return (StatusCode::OK, "Ok");
         }
     };
 
-    println!("download: {:?}", download);
+    // start download
+    match ytd.download() {
+        Ok(download) => download,
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to start download: {}", e);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Failed to download video".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
+            return (StatusCode::OK, "Ok");
+        }
+    };
 
     // list files in /tmp
-    let files = tokio::fs::read_dir("/tmp")
-        .await
-        .expect("Failed to read /tmp directory");
-    println!("files: {:?}", files);
+    let mut files = match tokio::fs::read_dir("/tmp").await {
+        Ok(files) => files,
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to read /tmp: {}", e);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Failed to download video".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
+            return (StatusCode::OK, "Ok");
+        }
+    };
+
+    match files.next_entry().await.unwrap() {
+        Some(video) => {
+            log::info!(target: operation_id, "Video file: {:?}", video.path());
+        }
+        None => {
+            log::error!(target: operation_id, "Video not found");
+            return (StatusCode::OK, "Ok");
+        }
+    };
 
     // check if the video is larger than 50MB
     // if it is, send a message saying that the video is too large
     // and delete the video
-    let file = File::open(format!("/tmp/{}.mp4", video_name))
-        .await
-        .expect("Failed to open video file");
-    let metadata = file.metadata().await.expect("Failed to get video metadata");
+    let file = match File::open(format!("/tmp/{}.mp4", video_name)).await {
+        Ok(file) => file,
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to open video: {}", e);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Failed to download video".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
+            return (StatusCode::OK, "Ok");
+        }
+    };
+
+    let metadata = match file.metadata().await {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to get video metadata: {}", e);
+            if let Err(e) = api
+                .send_message(
+                    update.message.from.id,
+                    "Failed to download video".to_string(),
+                )
+                .await
+            {
+                log::error!(target: operation_id, "Failed to send message: {}", e);
+            }
+            return (StatusCode::OK, "Ok");
+        }
+    };
+
     let size = metadata.len();
-    if size > 50_000_000 {
-        api.send_message(
-            update.message.from.id,
-            "Video is too large to send".to_string(),
-        )
-        .await
-        .expect("Failed to send message about video being too large");
-        tokio::fs::remove_file(format!("/tmp/{}.mp4", video_name))
+    if size > 50 * 1024 * 1024 {
+        log::warn!(target: operation_id, "Video is too large to send: {} bytes", size);
+        if let Err(e) = api
+            .send_message(update.message.from.id, "Video is too large".to_string())
             .await
-            .expect("Failed to delete video");
+        {
+            log::error!(target: operation_id, "Failed to send message: {}", e);
+        }
+        if let Err(e) = tokio::fs::remove_file(format!("/tmp/{}.mp4", video_name)).await {
+            log::error!(target: operation_id, "Failed to delete video: {}", e);
+        }
         return (StatusCode::OK, "Ok");
     }
 
-    api.send_video(update.message.from.id, format!("/tmp/{}.mp4", video_name))
+    match api
+        .send_video(update.message.from.id, format!("/tmp/{}.mp4", video_name))
         .await
-        .expect("Failed to send video");
+    {
+        Ok(_) => {
+            log::info!(target: operation_id, "Video sent");
+        }
+        Err(e) => {
+            log::error!(target: operation_id, "Failed to send video: {}", e);
+        }
+    }
 
     (StatusCode::OK, "Ok")
 }
