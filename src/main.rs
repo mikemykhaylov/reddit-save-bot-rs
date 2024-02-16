@@ -11,12 +11,12 @@ use axum::{
     Json, Router,
 };
 use std::net::SocketAddr;
-use tokio::fs::File;
+use tokio::{fs::File, main, net::TcpListener};
 use url::Url;
 use uuid::Uuid;
 use ytd_rs::{Arg, YoutubeDL};
 
-#[tokio::main]
+#[main]
 async fn main() {
     // set up logging
     logging::set_up_logger();
@@ -31,10 +31,8 @@ async fn main() {
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn handler() -> Html<&'static str> {
