@@ -10,7 +10,7 @@ jobs:
     # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
     # See: https://circleci.com/docs/configuration-reference/#executor-job
     docker:
-      - image: cimg/base:stable
+      - image: cimg/base:current
     # Add steps to the job
     # See: https://circleci.com/docs/configuration-reference/#steps
     steps:
@@ -31,7 +31,7 @@ jobs:
             - images
   deploy:
     docker:
-      - image: cimg/gcp:2023.08
+      - image: cimg/gcp:2023.12
     steps:
       - run:
           name: Create auth configuration files
@@ -75,7 +75,7 @@ jobs:
       - attach_workspace:
           at: .
       - setup_remote_docker:
-          version: 20.10.18
+          version: default
       - run:
           name: Load image
           command: |
@@ -89,14 +89,7 @@ jobs:
       - run:
           name: Update the Cloud Run with new image
           command: gcloud run services update "${CIRCLE_PROJECT_REPONAME}" --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
-  push:
-    docker:
-      - image: cimg/gcp:2023.08
-    steps:
-      - attach_workspace:
-          at: "$HOME"
-      - run: ls -la
-
+  
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
