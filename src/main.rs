@@ -186,9 +186,6 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         }
     };
 
-    // check if the video is larger than 50MB
-    // if it is, send a message saying that the video is too large
-    // and delete the video
     let file = match File::open(format!("/tmp/{}.mp4", video_name)).await {
         Ok(file) => file,
         Err(e) => {
@@ -223,6 +220,9 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
         }
     };
 
+    // check if the video is larger than 50MB
+    // if it is, send a message saying that the video is too large
+    // and delete the video
     let size = metadata.len();
     if size > 50 * 1024 * 1024 {
         log::warn!(target: operation_id, "Video is too large to send: {} bytes", size);
