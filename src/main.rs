@@ -68,6 +68,8 @@ async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse 
             "Message is not from personal id: {}",
             update.message.from.id
         );
+        // print the message (just curious what people are sending)
+        log::info!(target: operation_id, "Message: {}", update.message.text);
         return (StatusCode::OK, "Ok");
     }
 
