@@ -1,6 +1,6 @@
 # Using the `rust-musl-builder` as base image, instead of 
 # the official Rust toolchain
-FROM clux/muslrust:1.72.0 AS chef
+FROM clux/muslrust:stable AS chef
 USER root
 RUN cargo install cargo-chef
 WORKDIR /app
@@ -16,7 +16,7 @@ RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path r
 COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
-FROM alpine:3.18 AS runtime
+FROM alpine:latest AS runtime
 RUN apk add --no-cache yt-dlp ffmpeg
 RUN addgroup -S myuser && adduser -S myuser -G myuser
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/reddit-save-bot /usr/local/bin/
