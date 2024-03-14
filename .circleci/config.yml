@@ -4,6 +4,44 @@
 version: 2.1
 
 commands:
+  authenticate-gcp:
+    steps:
+      - run:
+          name: Create auth configuration files
+          command: |
+            GCP_SERVICE_ACCOUNT_EMAIL="ci-service-account@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+            GCP_OIDC_AUDIENCE="projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WORKLOAD_IDENTITY_POOL_ID}/providers/${GCP_OIDC_PROVIDER_ID}"
+            GCP_IMPERSONATION_URL="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken"
+
+            mkdir -p ~/.config/gcloud
+            echo "${CIRCLE_OIDC_TOKEN}" > $HOME/.config/gcloud/oidc_access_token
+
+            cat >> $HOME/.config/gcloud/application_default_credentials.json \<<- EOF
+            {
+              "type": "external_account",
+              "audience": "//iam.googleapis.com/${GCP_OIDC_AUDIENCE}",
+              "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+              "token_url": "https://sts.googleapis.com/v1/token",
+              "credential_source": {
+                "file": "$HOME/.config/gcloud/oidc_access_token",
+                "format": {
+                  "type": "text"
+                }
+              },
+              "service_account_impersonation_url": "${GCP_IMPERSONATION_URL}"
+            }
+            EOF
+      - run:
+          name: Show the files before auth
+          command: |
+            cat $HOME/.config/gcloud/application_default_credentials.json
+            cat $HOME/.config/gcloud/oidc_access_token
+      - run:
+          name: Try authenticating with creds
+          command: gcloud auth login --verbosity debug --cred-file "$HOME/.config/gcloud/application_default_credentials.json"
+      - run:
+          name: Set GCP project
+          command: gcloud config set project "$GCP_PROJECT_ID"
   deploy-service:
     parameters:
       cloud-run-instance:
@@ -44,42 +82,7 @@ jobs:
     docker:
       - image: cimg/gcp:2023.12
     steps:
-      - run:
-          name: Create auth configuration files
-          command: |
-            GCP_SERVICE_ACCOUNT_EMAIL="ci-service-account@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
-            GCP_OIDC_AUDIENCE="projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WORKLOAD_IDENTITY_POOL_ID}/providers/${GCP_OIDC_PROVIDER_ID}"
-            GCP_IMPERSONATION_URL="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken"
-
-            mkdir -p ~/.config/gcloud
-            echo "${CIRCLE_OIDC_TOKEN}" > $HOME/.config/gcloud/oidc_access_token
-
-            cat >> $HOME/.config/gcloud/application_default_credentials.json \<<- EOF
-            {
-              "type": "external_account",
-              "audience": "//iam.googleapis.com/${GCP_OIDC_AUDIENCE}",
-              "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-              "token_url": "https://sts.googleapis.com/v1/token",
-              "credential_source": {
-                "file": "$HOME/.config/gcloud/oidc_access_token",
-                "format": {
-                  "type": "text"
-                }
-              },
-              "service_account_impersonation_url": "${GCP_IMPERSONATION_URL}"
-            }
-            EOF
-      - run:
-          name: Show the files before auth
-          command: |
-            cat $HOME/.config/gcloud/application_default_credentials.json
-            cat $HOME/.config/gcloud/oidc_access_token
-      - run:
-          name: Try authenticating with creds
-          command: gcloud auth login --verbosity debug --cred-file "$HOME/.config/gcloud/application_default_credentials.json"
-      - run:
-          name: Set GCP project
-          command: gcloud config set project "$GCP_PROJECT_ID"
+      - authenticate-gcp
       - run:
           name: Set up Docker auth
           command: gcloud auth configure-docker "${GCP_AR_REGION}-docker.pkg.dev"
@@ -101,11 +104,13 @@ jobs:
     docker:
       - image: cimg/gcp:2023.12
     steps:
+      - authenticate-gcp
       - deploy-service
   deploy-staging:
     docker:
       - image: cimg/gcp:2023.12
     steps:
+      - authenticate-gcp
       - deploy-service:
           cloud-run-instance: "${CIRCLE_PROJECT_REPONAME}-staging"
   
