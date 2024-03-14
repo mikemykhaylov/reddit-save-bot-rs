@@ -3,6 +3,17 @@
 ---
 version: 2.1
 
+commands:
+  deploy-service:
+    parameters:
+      cloud-run-instance:
+        type: string
+        default: ${CIRCLE_PROJECT_REPONAME}
+    steps:
+      - run:
+          name: Update the Cloud Run with new image
+          command: gcloud run services update <<parameters.cloud-run-instance>> --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
+
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/configuration-reference/#jobs
 jobs:
@@ -29,7 +40,7 @@ jobs:
           root: .
           paths:
             - images
-  deploy:
+  push:
     docker:
       - image: cimg/gcp:2023.12
     steps:
@@ -86,16 +97,37 @@ jobs:
       - run:
           name: Push image for Artifact Registry
           command: docker push "${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}"
-      - run:
-          name: Update the Cloud Run with new image
-          command: gcloud run services update "${CIRCLE_PROJECT_REPONAME}" --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
+  deploy-prod:
+    docker:
+      - image: cimg/gcp:2023.12
+    steps:
+      - deploy-service
+  deploy-staging:
+    docker:
+      - image: cimg/gcp:2023.12
+    steps:
+      - deploy-service:
+          cloud-run-instance: "${CIRCLE_PROJECT_REPONAME}-staging"
   
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
-  build-push-deploy:
+  build-deploy:
     jobs:
       - build
-      - deploy:
+      - push:
           requires:
             - build
+      - deploy-prod:
+          requires:
+            - push
+          filters:
+            branches:
+              only: /main/
+      - deploy-staging:
+          requires:
+            - push
+          filters:
+            branches:
+              ignore: /main/
+
