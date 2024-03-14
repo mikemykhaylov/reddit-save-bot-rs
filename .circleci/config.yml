@@ -3,35 +3,8 @@
 ---
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/configuration-reference/#jobs
-jobs:
-  build:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/configuration-reference/#executor-job
-    docker:
-      - image: cimg/base:current
-    # Add steps to the job
-    # See: https://circleci.com/docs/configuration-reference/#steps
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true # DLC will explicitly cache layers here and try to avoid rebuilding.
-      - run:
-          name: "Build Docker image"
-          command: "docker build . --tag ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}"
-      - run:
-          name: Save image as tar
-          command: |
-            mkdir -p images
-            docker image save -o "images/${CIRCLE_PROJECT_REPONAME}_${CIRCLE_SHA1}" "${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}"
-      - persist_to_workspace:
-          root: .
-          paths:
-            - images
-  deploy:
-    docker:
-      - image: cimg/gcp:2023.12
+commands:
+  authenticate-gcp:
     steps:
       - run:
           name: Create auth configuration files
@@ -69,6 +42,47 @@ jobs:
       - run:
           name: Set GCP project
           command: gcloud config set project "$GCP_PROJECT_ID"
+  deploy-service:
+    parameters:
+      cloud-run-instance:
+        type: string
+        default: ${CIRCLE_PROJECT_REPONAME}
+    steps:
+      - run:
+          name: Update the Cloud Run with new image
+          command: gcloud run services update <<parameters.cloud-run-instance>> --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
+
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/configuration-reference/#jobs
+jobs:
+  build:
+    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/configuration-reference/#executor-job
+    docker:
+      - image: cimg/base:current
+    # Add steps to the job
+    # See: https://circleci.com/docs/configuration-reference/#steps
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true # DLC will explicitly cache layers here and try to avoid rebuilding.
+      - run:
+          name: "Build Docker image"
+          command: "docker build . --tag ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}"
+      - run:
+          name: Save image as tar
+          command: |
+            mkdir -p images
+            docker image save -o "images/${CIRCLE_PROJECT_REPONAME}_${CIRCLE_SHA1}" "${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}"
+      - persist_to_workspace:
+          root: .
+          paths:
+            - images
+  push:
+    docker:
+      - image: cimg/gcp:2023.12
+    steps:
+      - authenticate-gcp
       - run:
           name: Set up Docker auth
           command: gcloud auth configure-docker "${GCP_AR_REGION}-docker.pkg.dev"
@@ -86,16 +100,39 @@ jobs:
       - run:
           name: Push image for Artifact Registry
           command: docker push "${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}"
-      - run:
-          name: Update the Cloud Run with new image
-          command: gcloud run services update "${CIRCLE_PROJECT_REPONAME}" --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
+  deploy-prod:
+    docker:
+      - image: cimg/gcp:2023.12
+    steps:
+      - authenticate-gcp
+      - deploy-service
+  deploy-staging:
+    docker:
+      - image: cimg/gcp:2023.12
+    steps:
+      - authenticate-gcp
+      - deploy-service:
+          cloud-run-instance: "${CIRCLE_PROJECT_REPONAME}-staging"
   
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
-  build-push-deploy:
+  build-deploy:
     jobs:
       - build
-      - deploy:
+      - push:
           requires:
             - build
+      - deploy-prod:
+          requires:
+            - push
+          filters:
+            branches:
+              only: /main/
+      - deploy-staging:
+          requires:
+            - push
+          filters:
+            branches:
+              ignore: /main/
+
