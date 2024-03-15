@@ -6,15 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.79"
+anyhow = "1.0.81"
 axum = "0.7.4"
-chrono = "0.4.31"
+chrono = "0.4.35"
 google_cloud_logging = "0.1.0"
-log = { version = "0.4.20" , features = ["std"]}
-reqwest = { version = "0.11.20", features = ["stream", "multipart"] }
-serde = { version = "1.0.186", features = ["serde_derive"] }
-serde_json = "1.0.105"
-tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros", "fs"] }
-url = "2.4.0"
-uuid = { version = "1.4.1", features = ["v4"] }
+log = { version = "0.4.21" , features = ["std"]}
+reqwest = { version = "0.11.26", features = ["stream", "multipart"] }
+serde = { version = "1.0.197", features = ["serde_derive"] }
+serde_json = "1.0.114"
+tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "fs"] }
+url = "2.5.0"
+uuid = { version = "1.7.0", features = ["v4"] }
 ytd-rs = { version = "0.1.7", features = ["yt-dlp"] }
