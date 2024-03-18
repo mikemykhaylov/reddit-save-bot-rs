@@ -28,7 +28,10 @@ commands:
             cat $HOME/.config/gcloud/oidc_access_token
       - run:
           name: Try authenticating with creds
-          command: gcloud auth login --verbosity debug --cred-file "$HOME/.config/gcloud/application_default_credentials.json"
+          command: |
+            gcloud auth login \
+              --verbosity debug \
+              --cred-file "$HOME/.config/gcloud/application_default_credentials.json"
       - run:
           name: Set GCP project
           command: gcloud config set project "$GCP_PROJECT_ID"
@@ -40,7 +43,11 @@ commands:
     steps:
       - run:
           name: Update the Cloud Run with new image
-          command: gcloud run services update <<parameters.cloud-run-instance>> --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" --region="${GCP_AR_REGION}"
+          command: |
+            gcloud run services update \
+              <<parameters.cloud-run-instance>> \
+              --image="${GCP_AR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_AR_REPO}/${CIRCLE_PROJECT_REPONAME}:latest" \
+              --region="${GCP_AR_REGION}"
 
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/configuration-reference/#jobs
