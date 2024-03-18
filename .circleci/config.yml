@@ -11,26 +11,16 @@ commands:
           command: |
             GCP_SERVICE_ACCOUNT_EMAIL="${GCP_SERVICE_ACCOUNT_ID}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
             GCP_OIDC_AUDIENCE="projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WORKLOAD_IDENTITY_POOL_ID}/providers/${GCP_OIDC_PROVIDER_ID}"
-            GCP_IMPERSONATION_URL="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken"
 
             mkdir -p ~/.config/gcloud
             echo "${CIRCLE_OIDC_TOKEN}" > $HOME/.config/gcloud/oidc_access_token
 
-            cat >> $HOME/.config/gcloud/application_default_credentials.json \<<- EOF
-            {
-              "type": "external_account",
-              "audience": "//iam.googleapis.com/${GCP_OIDC_AUDIENCE}",
-              "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-              "token_url": "https://sts.googleapis.com/v1/token",
-              "credential_source": {
-                "file": "$HOME/.config/gcloud/oidc_access_token",
-                "format": {
-                  "type": "text"
-                }
-              },
-              "service_account_impersonation_url": "${GCP_IMPERSONATION_URL}"
-            }
-            EOF
+            gcloud iam workload-identity-pools create-cred-config \
+              "${GCP_OIDC_AUDIENCE}" \
+              --service-account="${GCP_SERVICE_ACCOUNT_EMAIL}" \
+              --output-file="$HOME/.config/gcloud/application_default_credentials.json" \
+              --credential-source-file="$HOME/.config/gcloud/oidc_access_token" \
+              --credential-source-type=text
       - run:
           name: Show the files before auth
           command: |
