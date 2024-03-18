@@ -9,7 +9,7 @@ commands:
       - run:
           name: Create auth configuration files
           command: |
-            GCP_SERVICE_ACCOUNT_EMAIL="ci-service-account@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+            GCP_SERVICE_ACCOUNT_EMAIL="${GCP_SERVICE_ACCOUNT_ID}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
             GCP_OIDC_AUDIENCE="projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WORKLOAD_IDENTITY_POOL_ID}/providers/${GCP_OIDC_PROVIDER_ID}"
             GCP_IMPERSONATION_URL="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken"
 
@@ -113,7 +113,7 @@ jobs:
       - authenticate-gcp
       - deploy-service:
           cloud-run-instance: "${CIRCLE_PROJECT_REPONAME}-staging"
-  
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 workflows:
@@ -135,4 +135,3 @@ workflows:
           filters:
             branches:
               ignore: /main/
-
