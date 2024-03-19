@@ -63,12 +63,7 @@ impl TelegramAPI {
             "https://api.telegram.org/bot{}/sendVideo?chat_id={}",
             self.token, chat_id
         );
-        let res = &self
-            .client
-            .post(url)
-            .multipart(form)
-            .send()
-            .await?;
+        let res = &self.client.post(url).multipart(form).send().await?;
         if !res.status().is_success() {
             anyhow::bail!("Failed to send message: {}", res.status());
         }
