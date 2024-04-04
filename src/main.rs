@@ -5,7 +5,7 @@ use std::{env, path::PathBuf};
 
 use api::telegram::{TelegramAPI, Update};
 use axum::{
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
@@ -39,8 +39,11 @@ async fn handler() -> Html<&'static str> {
     Html("<h1>Hello, World!</h1>")
 }
 
-async fn get_video(Json(request): Json<serde_json::Value>) -> impl IntoResponse {
-    let operation_id = &Uuid::new_v4().to_string();
+async fn get_video(
+    headers: HeaderMap,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let operation_id = headers.get("traceparent").unwrap().to_str().unwrap();
 
     log::info!(target: operation_id, "Started handler");
 

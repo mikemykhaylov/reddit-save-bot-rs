@@ -74,6 +74,7 @@ impl Log for Logger {
                 line: Some(record.line().unwrap_or(0).to_string()),
                 ..Default::default()
             }),
+            trace: Some(operation_id.to_string()),
             ..Default::default()
         };
         println!(
