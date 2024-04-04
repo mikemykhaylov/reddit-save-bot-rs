@@ -43,12 +43,7 @@ async fn get_video(
     headers: HeaderMap,
     Json(request): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let operation_id = &Uuid::new_v4().to_string();
-
-    // loop over the headers and log them
-    for (key, value) in headers.iter() {
-        log::info!(target: operation_id, "{}: {}", key, value.to_str().unwrap());
-    }
+    let operation_id = headers.get("traceparent").unwrap().to_str().unwrap();
 
     log::info!(target: operation_id, "Started handler");
 
