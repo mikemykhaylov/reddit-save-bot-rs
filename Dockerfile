@@ -16,7 +16,7 @@ RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path r
 COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
-FROM alpine:latest AS runtime
+FROM alpine:edge AS runtime
 RUN apk add --no-cache yt-dlp ffmpeg
 RUN addgroup -S myuser && adduser -S myuser -G myuser
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/reddit-save-bot /usr/local/bin/
